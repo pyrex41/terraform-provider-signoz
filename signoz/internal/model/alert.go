@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,21 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/structure"
 )
+
+// marshalJSONNoEscape encodes v as JSON without HTML escaping.
+func marshalJSONNoEscape(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
+}
 
 const (
 	AlertTypeMetrics    = "METRIC_BASED_ALERT"
@@ -103,7 +119,7 @@ func (a Alert) GetType() string {
 }
 
 func (a Alert) ConditionToTerraform() (types.String, error) {
-	b, err := json.Marshal(a.Condition)
+	b, err := marshalJSONNoEscape(a.Condition)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -166,7 +182,7 @@ func (a Alert) NotificationSettingsToTerraform(ctx context.Context) (types.Objec
 }
 
 func (a Alert) EvaluationToTerraform() (types.String, error) {
-	b, err := json.Marshal(a.Evaluation)
+	b, err := marshalJSONNoEscape(a.Evaluation)
 	if err != nil {
 		return types.StringValue(""), err
 	}

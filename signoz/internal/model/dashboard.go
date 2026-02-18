@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -10,6 +11,24 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/structure"
 )
+
+// marshalJSON encodes v as JSON without HTML escaping (no \u003c, \u003e, \u0026).
+// Go's json.Marshal HTML-escapes <, >, & by default which causes plan/state
+// mismatches when JSON contains SQL queries with >= or < operators.
+func marshalJSON(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	// Encode appends a newline; trim it
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
+}
 
 // Dashboard model.
 type Dashboard struct {
@@ -31,7 +50,7 @@ func (d Dashboard) PanelMapToTerraform() (types.String, error) {
 	if d.PanelMap == nil {
 		return types.StringNull(), nil
 	}
-	b, err := json.Marshal(d.PanelMap)
+	b, err := marshalJSON(d.PanelMap)
 	if err != nil {
 		return types.StringNull(), err
 	}
@@ -40,7 +59,7 @@ func (d Dashboard) PanelMapToTerraform() (types.String, error) {
 }
 
 func (d Dashboard) VariablesToTerraform() (types.String, error) {
-	b, err := json.Marshal(d.Variables)
+	b, err := marshalJSON(d.Variables)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -57,7 +76,7 @@ func (d Dashboard) TagsToTerraform() (types.List, diag.Diagnostics) {
 }
 
 func (d Dashboard) LayoutToTerraform() (types.String, error) {
-	b, err := json.Marshal(d.Layout)
+	b, err := marshalJSON(d.Layout)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -65,7 +84,7 @@ func (d Dashboard) LayoutToTerraform() (types.String, error) {
 }
 
 func (d Dashboard) WidgetsToTerraform() (types.String, error) {
-	b, err := json.Marshal(d.Widgets)
+	b, err := marshalJSON(d.Widgets)
 	if err != nil {
 		return types.StringValue(""), err
 	}
