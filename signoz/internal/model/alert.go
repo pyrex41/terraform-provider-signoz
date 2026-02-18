@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -102,12 +103,12 @@ func (a Alert) GetType() string {
 }
 
 func (a Alert) ConditionToTerraform() (types.String, error) {
-	condition, err := structure.FlattenJsonToString(a.Condition)
+	b, err := json.Marshal(a.Condition)
 	if err != nil {
 		return types.StringValue(""), err
 	}
 
-	return types.StringValue(condition), nil
+	return types.StringValue(string(b)), nil
 }
 
 func (a Alert) NotificationSettingsToTerraform(ctx context.Context) (types.Object, diag.Diagnostics) {
@@ -165,11 +166,11 @@ func (a Alert) NotificationSettingsToTerraform(ctx context.Context) (types.Objec
 }
 
 func (a Alert) EvaluationToTerraform() (types.String, error) {
-	evaluation, err := structure.FlattenJsonToString(a.Evaluation)
+	b, err := json.Marshal(a.Evaluation)
 	if err != nil {
 		return types.StringValue(""), err
 	}
-	return types.StringValue(evaluation), nil
+	return types.StringValue(string(b)), nil
 }
 
 func (a Alert) LabelsToTerraform() (types.Map, diag.Diagnostics) {

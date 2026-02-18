@@ -31,21 +31,21 @@ func (d Dashboard) PanelMapToTerraform() (types.String, error) {
 	if d.PanelMap == nil {
 		return types.StringNull(), nil
 	}
-	panelMap, err := structure.FlattenJsonToString(d.PanelMap)
+	b, err := json.Marshal(d.PanelMap)
 	if err != nil {
 		return types.StringNull(), err
 	}
 
-	return types.StringValue(panelMap), nil
+	return types.StringValue(string(b)), nil
 }
 
 func (d Dashboard) VariablesToTerraform() (types.String, error) {
-	variables, err := structure.FlattenJsonToString(d.Variables)
+	b, err := json.Marshal(d.Variables)
 	if err != nil {
 		return types.StringValue(""), err
 	}
 
-	return types.StringValue(variables), nil
+	return types.StringValue(string(b)), nil
 }
 
 func (d Dashboard) TagsToTerraform() (types.List, diag.Diagnostics) {
