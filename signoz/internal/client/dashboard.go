@@ -36,22 +36,26 @@ func (c *Client) GetDashboard(ctx context.Context, dashboardUUID string) (*dashb
 	var bodyObj dashboardResponse
 	err = json.Unmarshal(body, &bodyObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal dashboard response: %w (body: %s)", err, truncateStr(string(body), 500))
 	}
 
 	if bodyObj.Status != "success" || bodyObj.Error != "" {
 		tflog.Error(ctx, "GetDashboard: error while fetching dashboard", map[string]any{
 			"error":     bodyObj.Error,
 			"errorType": bodyObj.ErrorType,
-			"data":      bodyObj.Data,
 		})
 
 		return &dashboardData{}, fmt.Errorf("error while fetching dashboard: %s", bodyObj.Error)
 	}
 
-	tflog.Debug(ctx, "GetDashboard: dashboard fetched", map[string]any{"dashboard": bodyObj.Data})
+	dashboard, err := parseDashboardData(bodyObj.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse dashboard data: %w", err)
+	}
 
-	return &bodyObj.Data, nil
+	tflog.Debug(ctx, "GetDashboard: dashboard fetched", map[string]any{"dashboardID": dashboard.ID})
+
+	return dashboard, nil
 }
 
 // CreateDashboard - Creates a new dashboard.
@@ -79,21 +83,25 @@ func (c *Client) CreateDashboard(ctx context.Context, dashboardPayload *model.Da
 	var bodyObj dashboardResponse
 	err = json.Unmarshal(body, &bodyObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal create dashboard response: %w (body: %s)", err, truncateStr(string(body), 500))
 	}
 
 	if bodyObj.Status != "success" || bodyObj.Error != "" {
 		tflog.Error(ctx, "CreateDashboard: error while creating dashboard", map[string]any{
 			"error":     bodyObj.Error,
 			"errorType": bodyObj.ErrorType,
-			"data":      bodyObj.Data,
 		})
 		return nil, fmt.Errorf("error while creating dashboard: %s", bodyObj.Error)
 	}
 
-	tflog.Debug(ctx, "CreateDashboard: dashboard created", map[string]any{"dashboard": bodyObj.Data})
+	dashboard, err := parseDashboardData(bodyObj.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created dashboard data: %w", err)
+	}
 
-	return &bodyObj.Data, nil
+	tflog.Debug(ctx, "CreateDashboard: dashboard created", map[string]any{"dashboardID": dashboard.ID})
+
+	return dashboard, nil
 }
 
 // UpdateDashboard - Updates an existing dashboard.
