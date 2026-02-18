@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -121,9 +120,6 @@ func (r *alertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			attr.Condition: schema.StringAttribute{
 				Required:    true,
 				Description: "Condition of the alert.",
-				PlanModifiers: []planmodifier.String{
-					CompactJSON(),
-				},
 			},
 			attr.Description: schema.StringAttribute{
 				Optional:    true,
@@ -262,9 +258,6 @@ func (r *alertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Computed:    true,
 				Description: "Evaluation settings for the alert (JSON). Only used when schema_version is v2 or higher.",
-				PlanModifiers: []planmodifier.String{
-					CompactJSON(),
-				},
 			},
 			// computed.
 			attr.ID: schema.StringAttribute{
