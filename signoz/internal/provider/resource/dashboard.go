@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -94,6 +95,9 @@ func (r *dashboardResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			attr.Layout: schema.StringAttribute{
 				Required:    true,
 				Description: "Layout of the dashboard.",
+				PlanModifiers: []planmodifier.String{
+					CompactJSON(),
+				},
 			},
 			attr.Name: schema.StringAttribute{
 				Required:    true,
@@ -101,6 +105,9 @@ func (r *dashboardResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			},
 			attr.PanelMap: schema.StringAttribute{
 				Optional: true,
+				PlanModifiers: []planmodifier.String{
+					CompactJSON(),
+				},
 			},
 			attr.Source: schema.StringAttribute{
 				Optional:    true,
@@ -122,10 +129,16 @@ func (r *dashboardResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 			attr.Variables: schema.StringAttribute{
 				Required:    true,
 				Description: "Variables for the dashboard.",
+				PlanModifiers: []planmodifier.String{
+					CompactJSON(),
+				},
 			},
 			attr.Widgets: schema.StringAttribute{
 				Required:    true,
 				Description: "Widgets for the dashboard.",
+				PlanModifiers: []planmodifier.String{
+					CompactJSON(),
+				},
 			},
 			attr.Version: schema.StringAttribute{
 				Required:    true,
