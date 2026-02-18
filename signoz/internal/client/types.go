@@ -27,9 +27,10 @@ type alertResponse struct {
 
 // parseAlertData parses the alert data from the response, handling both
 // a single object and an array (taking the first element).
+// Returns (nil, nil) when the data is empty, indicating the resource does not exist.
 func parseAlertData(raw json.RawMessage) (*model.Alert, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil, fmt.Errorf("alert data is empty or null")
+		return nil, nil
 	}
 
 	// Try single object first.
@@ -42,7 +43,7 @@ func parseAlertData(raw json.RawMessage) (*model.Alert, error) {
 	var alerts []model.Alert
 	if err := json.Unmarshal(raw, &alerts); err == nil {
 		if len(alerts) == 0 {
-			return nil, fmt.Errorf("alert data array is empty")
+			return nil, nil
 		}
 		return &alerts[0], nil
 	}
@@ -62,9 +63,10 @@ type dashboardResponse struct {
 
 // parseDashboardData parses the dashboard data from the response, handling both
 // a single object and an array (taking the first element).
+// Returns (nil, nil) when the data is empty, indicating the resource does not exist.
 func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil, fmt.Errorf("dashboard data is empty or null")
+		return nil, nil
 	}
 
 	// Try single object first.
@@ -77,7 +79,7 @@ func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 	var arr []dashboardData
 	if err := json.Unmarshal(raw, &arr); err == nil {
 		if len(arr) == 0 {
-			return nil, fmt.Errorf("dashboard data array is empty")
+			return nil, nil
 		}
 		return &arr[0], nil
 	}

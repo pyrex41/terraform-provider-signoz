@@ -78,18 +78,24 @@ func TestParseDashboardData_Array(t *testing.T) {
 func TestParseDashboardData_EmptyArray(t *testing.T) {
 	raw := json.RawMessage(`[]`)
 
-	_, err := parseDashboardData(raw)
-	if err == nil {
-		t.Fatal("expected error for empty array, got nil")
+	result, err := parseDashboardData(raw)
+	if err != nil {
+		t.Fatalf("expected nil error for empty array, got: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for empty array, got: %v", result)
 	}
 }
 
 func TestParseDashboardData_Null(t *testing.T) {
 	raw := json.RawMessage(`null`)
 
-	_, err := parseDashboardData(raw)
-	if err == nil {
-		t.Fatal("expected error for null, got nil")
+	result, err := parseDashboardData(raw)
+	if err != nil {
+		t.Fatalf("expected nil error for null, got: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for null, got: %v", result)
 	}
 }
 
@@ -219,18 +225,24 @@ func TestParseAlertData_NullTimestamps(t *testing.T) {
 func TestParseAlertData_Null(t *testing.T) {
 	raw := json.RawMessage(`null`)
 
-	_, err := parseAlertData(raw)
-	if err == nil {
-		t.Fatal("expected error for null, got nil")
+	result, err := parseAlertData(raw)
+	if err != nil {
+		t.Fatalf("expected nil error for null, got: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for null, got: %v", result)
 	}
 }
 
 func TestParseAlertData_EmptyArray(t *testing.T) {
 	raw := json.RawMessage(`[]`)
 
-	_, err := parseAlertData(raw)
-	if err == nil {
-		t.Fatal("expected error for empty array, got nil")
+	result, err := parseAlertData(raw)
+	if err != nil {
+		t.Fatalf("expected nil error for empty array, got: %v", err)
+	}
+	if result != nil {
+		t.Fatalf("expected nil result for empty array, got: %v", result)
 	}
 }
 

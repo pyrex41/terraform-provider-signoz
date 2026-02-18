@@ -23,6 +23,25 @@ const (
 	SigNozAPIKeyHeader string = "SIGNOZ-API-KEY"
 )
 
+// NotFoundError indicates the requested resource does not exist.
+type NotFoundError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("resource not found (status: %d, body: %s)", e.StatusCode, e.Body)
+}
+
+// IsNotFound returns true if the error indicates a resource was not found.
+func IsNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*NotFoundError)
+	return ok
+}
+
 // Client - SigNoz API client.
 type Client struct {
 	agent      string
@@ -87,6 +106,9 @@ func (c *Client) doRequest(ctx context.Context, req *http.Request) ([]byte, erro
 		return nil, err
 	}
 
+	if res.StatusCode == http.StatusNotFound {
+		return nil, &NotFoundError{StatusCode: res.StatusCode, Body: string(body)}
+	}
 	if res.StatusCode/100 > 2 {
 		return nil, fmt.Errorf("status: %d, body: %s", res.StatusCode, body)
 	}

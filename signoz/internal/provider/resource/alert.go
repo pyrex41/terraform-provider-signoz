@@ -416,6 +416,13 @@ func (r *alertResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
+	// nil alert means it was deleted outside of Terraform.
+	if alert == nil {
+		tflog.Warn(ctx, "Alert not found, removing from state", map[string]any{"alert": state.ID.ValueString()})
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	// Overwrite items with refreshed state.
 	state.Alert = types.StringValue(alert.Alert)
 	state.AlertType = types.StringValue(alert.AlertType)
@@ -628,6 +635,10 @@ func (r *alertResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	// Delete existing alert.
 	err := r.client.DeleteAlert(ctx, state.ID.ValueString())
 	if err != nil {
+		if client.IsNotFound(err) {
+			// Already deleted, nothing to do.
+			return
+		}
 		addErr(&resp.Diagnostics, err, operationDelete, SigNozAlert)
 		return
 	}

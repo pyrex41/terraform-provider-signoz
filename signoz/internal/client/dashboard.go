@@ -30,6 +30,10 @@ func (c *Client) GetDashboard(ctx context.Context, dashboardUUID string) (*dashb
 
 	body, err := c.doRequest(ctx, req)
 	if err != nil {
+		if IsNotFound(err) {
+			tflog.Debug(ctx, "GetDashboard: dashboard not found (404)", map[string]any{"dashboardUUID": dashboardUUID})
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -45,12 +49,18 @@ func (c *Client) GetDashboard(ctx context.Context, dashboardUUID string) (*dashb
 			"errorType": bodyObj.ErrorType,
 		})
 
-		return &dashboardData{}, fmt.Errorf("error while fetching dashboard: %s", bodyObj.Error)
+		return nil, fmt.Errorf("error while fetching dashboard: %s", bodyObj.Error)
 	}
 
 	dashboard, err := parseDashboardData(bodyObj.Data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse dashboard data: %w", err)
+	}
+
+	// nil dashboard with no error means the resource doesn't exist
+	if dashboard == nil {
+		tflog.Debug(ctx, "GetDashboard: dashboard not found (empty response)", map[string]any{"dashboardUUID": dashboardUUID})
+		return nil, nil
 	}
 
 	tflog.Debug(ctx, "GetDashboard: dashboard fetched", map[string]any{"dashboardID": dashboard.ID})

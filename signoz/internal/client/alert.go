@@ -30,6 +30,10 @@ func (c *Client) GetAlert(ctx context.Context, alertID string) (*model.Alert, er
 
 	body, err := c.doRequest(ctx, req)
 	if err != nil {
+		if IsNotFound(err) {
+			tflog.Debug(ctx, "GetAlert: alert not found (404)", map[string]any{"alertID": alertID})
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -45,12 +49,18 @@ func (c *Client) GetAlert(ctx context.Context, alertID string) (*model.Alert, er
 			"type":  bodyObj.ErrorType,
 		})
 
-		return &model.Alert{}, fmt.Errorf("error while fetching alert: %s", bodyObj.Error)
+		return nil, fmt.Errorf("error while fetching alert: %s", bodyObj.Error)
 	}
 
 	alert, err := parseAlertData(bodyObj.Data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse alert data: %w", err)
+	}
+
+	// nil alert with no error means the resource doesn't exist
+	if alert == nil {
+		tflog.Debug(ctx, "GetAlert: alert not found (empty response)", map[string]any{"alertID": alertID})
+		return nil, nil
 	}
 
 	tflog.Debug(ctx, "GetAlert: alert fetched", map[string]any{"alertID": alert.ID})

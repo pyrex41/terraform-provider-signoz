@@ -246,6 +246,13 @@ func (r *dashboardResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	// nil dashboard means it was deleted outside of Terraform.
+	if dashboard == nil {
+		tflog.Warn(ctx, "Dashboard not found, removing from state", map[string]any{"dashboard": state.ID.ValueString()})
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	// Overwrite items with refreshed state.
 	state.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
 	state.CreatedAt = types.StringValue(dashboard.CreatedAt)
@@ -415,6 +422,10 @@ func (r *dashboardResource) Delete(ctx context.Context, req resource.DeleteReque
 	// Delete existing dashboard.
 	err := r.client.DeleteDashboard(ctx, state.ID.ValueString())
 	if err != nil {
+		if client.IsNotFound(err) {
+			// Already deleted, nothing to do.
+			return
+		}
 		addErr(&resp.Diagnostics, err, operationDelete, SigNozDashboard)
 		return
 	}
