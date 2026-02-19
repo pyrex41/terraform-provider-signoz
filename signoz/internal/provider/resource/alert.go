@@ -441,11 +441,10 @@ func (r *alertResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.UpdateBy = types.StringValue(alert.UpdateBy)
 	state.SchemaVersion = types.StringValue(alert.SchemaVersion)
 
-	state.Condition, err = alert.ConditionToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationRead, SigNozAlert)
-		return
-	}
+	// Don't overwrite state.Condition from the API response — the API may return
+	// extra keys or different key ordering that would cause terraform to detect
+	// drift and trigger an unnecessary update cycle. The condition is a Required,
+	// user-managed input; keep the current state value.
 
 	var diagLabelsRead diag.Diagnostics
 	state.Labels, diagLabelsRead = alert.LabelsToTerraform()
