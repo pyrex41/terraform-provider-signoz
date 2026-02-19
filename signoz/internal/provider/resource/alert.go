@@ -407,6 +407,15 @@ func (r *alertResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	tflog.Debug(ctx, "Reading alert", map[string]any{"alert": state.ID.ValueString()})
 
+	// If the ID is empty (e.g. upjet's EnsureTFState wrote initial state from
+	// forProvider before the first Create), remove the resource from state so
+	// terraform plans a Create instead of an Update.
+	if state.ID.ValueString() == "" {
+		tflog.Debug(ctx, "Read called with empty ID, removing resource from state to trigger Create")
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	// Get refreshed alert from SigNoz.
 	alert, err := r.client.GetAlert(ctx, state.ID.ValueString())
 	if err != nil {
@@ -489,6 +498,13 @@ func (r *alertResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Guard against empty ID — this should never happen in normal flow, but
+	// upjet's EnsureTFState can write state with empty ID before async Create.
+	if state.ID.ValueString() == "" {
+		addErr(&resp.Diagnostics, fmt.Errorf("cannot update alert with empty ID"), operationUpdate, SigNozAlert)
 		return
 	}
 
