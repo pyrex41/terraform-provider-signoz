@@ -57,7 +57,7 @@ func (c *Client) GetAlert(ctx context.Context, alertID string) (*model.Alert, er
 // CreateAlert - Creates a new alert.
 func (c *Client) CreateAlert(ctx context.Context, alertPayload *model.Alert) (*model.Alert, error) {
 	alertPayload.SetSourceIfEmpty(c.hostURL.String())
-	rb, err := json.Marshal(alertPayload)
+	rb, err := marshalJSONNoEscape(alertPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (c *Client) CreateAlert(ctx context.Context, alertPayload *model.Alert) (*m
 // UpdateAlert - Updates an existing alert.
 func (c *Client) UpdateAlert(ctx context.Context, alertID string, alertPayload *model.Alert) error {
 	alertPayload.SetSourceIfEmpty(c.hostURL.String())
-	rb, err := json.Marshal(alertPayload)
+	rb, err := marshalJSONNoEscape(alertPayload)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,24 @@ import (
 	"github.com/SigNoz/terraform-provider-signoz/signoz/internal/model"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+// marshalJSONNoEscape encodes v as JSON without HTML escaping (no \u003c, \u003e, \u0026).
+// Go's json.Marshal HTML-escapes <, >, & by default which causes perpetual
+// drift when JSON contains SQL/ClickHouse queries with >= or < operators.
+func marshalJSONNoEscape(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	// Encode appends a newline; trim it
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
+}
 
 const (
 	// dashboardPath - URL path for dashboard APIs.
@@ -57,7 +76,7 @@ func (c *Client) GetDashboard(ctx context.Context, dashboardUUID string) (*dashb
 // CreateDashboard - Creates a new dashboard.
 func (c *Client) CreateDashboard(ctx context.Context, dashboardPayload *model.Dashboard) (*dashboardData, error) {
 	dashboardPayload.SetSourceIfEmpty(c.hostURL.String())
-	rb, err := json.Marshal(dashboardPayload)
+	rb, err := marshalJSONNoEscape(dashboardPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +118,7 @@ func (c *Client) CreateDashboard(ctx context.Context, dashboardPayload *model.Da
 // UpdateDashboard - Updates an existing dashboard.
 func (c *Client) UpdateDashboard(ctx context.Context, dashboardUUID string, dashboardPayload *model.Dashboard) error {
 	dashboardPayload.SetSourceIfEmpty(c.hostURL.String())
-	rb, err := json.Marshal(dashboardPayload)
+	rb, err := marshalJSONNoEscape(dashboardPayload)
 	if err != nil {
 		return err
 	}
