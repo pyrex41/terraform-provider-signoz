@@ -122,6 +122,9 @@ func (r *alertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			attr.Condition: schema.StringAttribute{
 				Required:    true,
 				Description: "Condition of the alert.",
+				PlanModifiers: []planmodifier.String{
+					jsonNormalize(),
+				},
 			},
 			attr.Description: schema.StringAttribute{
 				Optional:    true,
@@ -260,6 +263,9 @@ func (r *alertResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional:    true,
 				Computed:    true,
 				Description: "Evaluation settings for the alert (JSON). Only used when schema_version is v2 or higher.",
+				PlanModifiers: []planmodifier.String{
+					jsonNormalize(),
+				},
 			},
 			// ID is computed by default but can be optionally provided to adopt
 			// an existing SigNoz alert (e.g., via Crossplane external-name).
