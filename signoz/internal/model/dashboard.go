@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -10,6 +11,35 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/structure"
 )
+
+// marshalJSONNoEscape encodes v as JSON without HTML escaping (no \u003c, \u003e, \u0026).
+// Go's json.Marshal HTML-escapes <, >, & by default which causes perpetual drift
+// when JSON contains SQL/ClickHouse queries with >= or < operators.
+func marshalJSONNoEscape(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
+}
+
+// flattenJSONNoEscape is like structure.FlattenJsonToString but without HTML escaping.
+func flattenJSONNoEscape(input map[string]interface{}) (string, error) {
+	if len(input) == 0 {
+		return "", nil
+	}
+	b, err := marshalJSONNoEscape(input)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
 
 // Dashboard model.
 type Dashboard struct {
@@ -31,7 +61,7 @@ func (d Dashboard) PanelMapToTerraform() (types.String, error) {
 	if d.PanelMap == nil {
 		return types.StringNull(), nil
 	}
-	panelMap, err := structure.FlattenJsonToString(d.PanelMap)
+	panelMap, err := flattenJSONNoEscape(d.PanelMap)
 	if err != nil {
 		return types.StringNull(), err
 	}
@@ -40,7 +70,7 @@ func (d Dashboard) PanelMapToTerraform() (types.String, error) {
 }
 
 func (d Dashboard) VariablesToTerraform() (types.String, error) {
-	variables, err := structure.FlattenJsonToString(d.Variables)
+	variables, err := flattenJSONNoEscape(d.Variables)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -57,7 +87,7 @@ func (d Dashboard) TagsToTerraform() (types.List, diag.Diagnostics) {
 }
 
 func (d Dashboard) LayoutToTerraform() (types.String, error) {
-	b, err := json.Marshal(d.Layout)
+	b, err := marshalJSONNoEscape(d.Layout)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -65,7 +95,7 @@ func (d Dashboard) LayoutToTerraform() (types.String, error) {
 }
 
 func (d Dashboard) WidgetsToTerraform() (types.String, error) {
-	b, err := json.Marshal(d.Widgets)
+	b, err := marshalJSONNoEscape(d.Widgets)
 	if err != nil {
 		return types.StringValue(""), err
 	}

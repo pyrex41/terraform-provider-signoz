@@ -209,6 +209,56 @@ func (r *dashboardResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// createOrAdopt either creates a new dashboard or adopts an existing one,
+	// then reads back the full state from the API. Reading back all fields
+	// (not just computed ones) avoids "inconsistent result after apply" errors
+	// caused by JSON normalization differences (whitespace, HTML escaping).
+	readBackState := func(dashboardID string) bool {
+		dashboard, getErr := r.client.GetDashboard(ctx, dashboardID)
+		if getErr != nil {
+			addErr(&resp.Diagnostics, getErr, operationCreate, SigNozDashboard)
+			return false
+		}
+		plan.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
+		plan.CreatedAt = types.StringValue(dashboard.CreatedAt)
+		plan.CreatedBy = types.StringValue(dashboard.CreatedBy)
+		plan.Description = types.StringValue(dashboard.Data.Description)
+		plan.ID = types.StringValue(dashboard.ID)
+		plan.Name = types.StringValue(dashboard.Data.Name)
+		plan.Source = types.StringValue(dashboard.Data.Source)
+		plan.Title = types.StringValue(dashboard.Data.Title)
+		plan.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
+		plan.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
+		plan.UploadedGrafana = types.BoolValue(dashboard.Data.UploadedGrafana)
+		plan.Version = types.StringValue(dashboard.Data.Version)
+
+		var fErr error
+		plan.Layout, fErr = dashboard.Data.LayoutToTerraform()
+		if fErr != nil {
+			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
+			return false
+		}
+		plan.PanelMap, fErr = dashboard.Data.PanelMapToTerraform()
+		if fErr != nil {
+			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
+			return false
+		}
+		plan.Variables, fErr = dashboard.Data.VariablesToTerraform()
+		if fErr != nil {
+			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
+			return false
+		}
+		plan.Widgets, fErr = dashboard.Data.WidgetsToTerraform()
+		if fErr != nil {
+			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
+			return false
+		}
+		var d diag.Diagnostics
+		plan.Tags, d = dashboard.Data.TagsToTerraform()
+		resp.Diagnostics.Append(d...)
+		return !resp.Diagnostics.HasError()
+	}
+
 	// If an ID is provided (e.g., from Crossplane external-name), adopt the
 	// existing dashboard by updating it instead of creating a new one.
 	if !plan.ID.IsNull() && !plan.ID.IsUnknown() && plan.ID.ValueString() != "" {
@@ -224,42 +274,26 @@ func (r *dashboardResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 
-		dashboard, err := r.client.GetDashboard(ctx, existingID)
-		if err != nil {
-			addErr(&resp.Diagnostics, err, operationCreate, SigNozDashboard)
+		if !readBackState(existingID) {
 			return
 		}
-
-		plan.ID = types.StringValue(dashboard.ID)
-		plan.Source = types.StringValue(dashboard.Data.Source)
-		plan.CreatedAt = types.StringValue(dashboard.CreatedAt)
-		plan.CreatedBy = types.StringValue(dashboard.CreatedBy)
-		plan.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
-		plan.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
-		plan.Version = types.StringValue(dashboard.Data.Version)
 	} else {
 		tflog.Debug(ctx, "Creating dashboard", map[string]any{"dashboard": dashboardPayload})
 
-		// Create new dashboard.
-		dashboard, err := r.client.CreateDashboard(ctx, dashboardPayload)
-		if err != nil {
+		dashboard, createErr := r.client.CreateDashboard(ctx, dashboardPayload)
+		if createErr != nil {
 			resp.Diagnostics.AddError(
 				"Error creating dashboard",
-				"Could not create dashboard, unexpected error: "+err.Error(),
+				"Could not create dashboard, unexpected error: "+createErr.Error(),
 			)
 			return
 		}
 
 		tflog.Debug(ctx, "Created dashboard", map[string]any{"dashboard": dashboard})
 
-		// Map response to schema and populate Computed attributes.
-		plan.ID = types.StringValue(dashboard.ID)
-		plan.Source = types.StringValue(dashboard.Data.Source)
-		plan.CreatedAt = types.StringValue(dashboard.CreatedAt)
-		plan.CreatedBy = types.StringValue(dashboard.CreatedBy)
-		plan.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
-		plan.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
-		plan.Version = types.StringValue(dashboard.Data.Version)
+		if !readBackState(dashboard.ID) {
+			return
+		}
 	}
 
 	// Set state to populated data.

@@ -102,7 +102,7 @@ func (a Alert) GetType() string {
 }
 
 func (a Alert) ConditionToTerraform() (types.String, error) {
-	condition, err := structure.FlattenJsonToString(a.Condition)
+	condition, err := flattenJSONNoEscape(a.Condition)
 	if err != nil {
 		return types.StringValue(""), err
 	}
@@ -165,7 +165,7 @@ func (a Alert) NotificationSettingsToTerraform(ctx context.Context) (types.Objec
 }
 
 func (a Alert) EvaluationToTerraform() (types.String, error) {
-	evaluation, err := structure.FlattenJsonToString(a.Evaluation)
+	evaluation, err := flattenJSONNoEscape(a.Evaluation)
 	if err != nil {
 		return types.StringValue(""), err
 	}
