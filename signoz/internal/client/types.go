@@ -61,7 +61,8 @@ type dashboardResponse struct {
 }
 
 // parseDashboardData parses the dashboard data from the response, handling both
-// a single object and an array (taking the first element).
+// a single object and an array (taking the last element, which is typically
+// the most recently created dashboard).
 func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, fmt.Errorf("dashboard data is empty or null")
@@ -73,13 +74,47 @@ func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 		return &single, nil
 	}
 
-	// Try array of dashboards (take the first element).
+	// Try array of dashboards. Take the last element — SigNoz may return
+	// all dashboards in the POST response, and the newly created one is
+	// appended at the end.
 	var arr []dashboardData
 	if err := json.Unmarshal(raw, &arr); err == nil {
 		if len(arr) == 0 {
 			return nil, fmt.Errorf("dashboard data array is empty")
 		}
-		return &arr[0], nil
+		return &arr[len(arr)-1], nil
+	}
+
+	return nil, fmt.Errorf("failed to parse dashboard data: unexpected format: %s", truncateStr(string(raw), 200))
+}
+
+// parseDashboardDataByName parses the dashboard data from an array response,
+// matching by name. Falls back to parseDashboardData if no name match found.
+func parseDashboardDataByName(raw json.RawMessage, name string) (*dashboardData, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, fmt.Errorf("dashboard data is empty or null")
+	}
+
+	// Try single object first.
+	var single dashboardData
+	if err := json.Unmarshal(raw, &single); err == nil && single.ID != "" {
+		return &single, nil
+	}
+
+	// Try array — match by name.
+	var arr []dashboardData
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		if len(arr) == 0 {
+			return nil, fmt.Errorf("dashboard data array is empty")
+		}
+		// Search for matching name (most specific match).
+		for i := range arr {
+			if arr[i].Data.Name == name {
+				return &arr[i], nil
+			}
+		}
+		// Fallback: return the last element (most recently created).
+		return &arr[len(arr)-1], nil
 	}
 
 	return nil, fmt.Errorf("failed to parse dashboard data: unexpected format: %s", truncateStr(string(raw), 200))

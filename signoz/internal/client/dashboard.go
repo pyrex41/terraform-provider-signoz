@@ -113,12 +113,12 @@ func (c *Client) CreateDashboard(ctx context.Context, dashboardPayload *model.Da
 		return nil, fmt.Errorf("error while creating dashboard: %s", bodyObj.Error)
 	}
 
-	dashboard, err := parseDashboardData(bodyObj.Data)
+	dashboard, err := parseDashboardDataByName(bodyObj.Data, dashboardPayload.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse created dashboard data: %w", err)
 	}
 
-	tflog.Debug(ctx, "CreateDashboard: dashboard created", map[string]any{"dashboardID": dashboard.ID})
+	tflog.Debug(ctx, "CreateDashboard: dashboard created", map[string]any{"dashboardID": dashboard.ID, "dashboardName": dashboard.Data.Name})
 
 	return dashboard, nil
 }
