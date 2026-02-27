@@ -36,22 +36,26 @@ func (c *Client) GetAlert(ctx context.Context, alertID string) (*model.Alert, er
 	var bodyObj alertResponse
 	err = json.Unmarshal(body, &bodyObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal alert response: %w (body: %s)", err, truncateStr(string(body), 500))
 	}
 
 	if bodyObj.Status != "success" || bodyObj.Error != "" {
 		tflog.Error(ctx, "GetAlert: error while fetching alert", map[string]any{
 			"error": bodyObj.Error,
 			"type":  bodyObj.ErrorType,
-			"data":  bodyObj.Data,
 		})
 
 		return &model.Alert{}, fmt.Errorf("error while fetching alert: %s", bodyObj.Error)
 	}
 
-	tflog.Debug(ctx, "GetAlert: alert fetched", map[string]any{"alert": bodyObj.Data})
+	alert, err := parseAlertData(bodyObj.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse alert data: %w", err)
+	}
 
-	return &bodyObj.Data, nil
+	tflog.Debug(ctx, "GetAlert: alert fetched", map[string]any{"alertID": alert.ID})
+
+	return alert, nil
 }
 
 // CreateAlert - Creates a new alert.
@@ -79,21 +83,29 @@ func (c *Client) CreateAlert(ctx context.Context, alertPayload *model.Alert) (*m
 	var bodyObj alertResponse
 	err = json.Unmarshal(body, &bodyObj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal create alert response: %w (body: %s)", err, truncateStr(string(body), 500))
 	}
 
 	if bodyObj.Status != "success" || bodyObj.Error != "" {
 		tflog.Error(ctx, "CreateAlert: error while creating alert", map[string]any{
 			"error":     bodyObj.Error,
 			"errorType": bodyObj.ErrorType,
-			"data":      bodyObj.Data,
 		})
 		return nil, fmt.Errorf("error while creating alert: %s", bodyObj.Error)
 	}
 
-	tflog.Debug(ctx, "CreateAlert: alert created", map[string]any{"alert": bodyObj.Data})
+	alert, err := parseAlertData(bodyObj.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created alert data: %w", err)
+	}
 
-	return &bodyObj.Data, nil
+	if alert.ID == "" {
+		return nil, fmt.Errorf("created alert has empty ID (response: %s)", truncateStr(string(body), 500))
+	}
+
+	tflog.Debug(ctx, "CreateAlert: alert created", map[string]any{"alertID": alert.ID})
+
+	return alert, nil
 }
 
 // UpdateAlert - Updates an existing alert.
