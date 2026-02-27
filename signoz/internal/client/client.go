@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,9 @@ import (
 	"github.com/gojek/heimdall/v7/httpclient"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
+
+// ErrNotFound is returned when a resource does not exist in SigNoz.
+var ErrNotFound = errors.New("resource not found")
 
 const (
 	// DefaultHostURL - Default SigNoz URL.
@@ -87,6 +91,9 @@ func (c *Client) doRequest(ctx context.Context, req *http.Request) ([]byte, erro
 		return nil, err
 	}
 
+	if res.StatusCode == 404 {
+		return nil, ErrNotFound
+	}
 	if res.StatusCode/100 > 2 {
 		return nil, fmt.Errorf("status: %d, body: %s", res.StatusCode, body)
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"errors"
+
 	"github.com/SigNoz/terraform-provider-signoz/signoz/internal/attr"
 	"github.com/SigNoz/terraform-provider-signoz/signoz/internal/client"
 	"github.com/SigNoz/terraform-provider-signoz/signoz/internal/model"
@@ -318,6 +320,12 @@ func (r *dashboardResource) Read(ctx context.Context, req resource.ReadRequest, 
 	// Get refreshed dashboard from SigNoz.
 	dashboard, err := r.client.GetDashboard(ctx, state.ID.ValueString())
 	if err != nil {
+		if errors.Is(err, client.ErrNotFound) {
+			// Dashboard doesn't exist — remove from state so it will be recreated.
+			tflog.Warn(ctx, "Dashboard not found, removing from state", map[string]any{"id": state.ID.ValueString()})
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
 		return
 	}

@@ -7,6 +7,9 @@ import (
 	"github.com/SigNoz/terraform-provider-signoz/signoz/internal/model"
 )
 
+// ErrDashboardNotFound is returned when a dashboard cannot be found.
+var ErrDashboardNotFound = fmt.Errorf("dashboard not found: %w", ErrNotFound)
+
 // signozResponse - Maps the response data.
 type signozResponse struct {
 	Status    string      `json:"status"`
@@ -80,7 +83,7 @@ func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 	var arr []dashboardData
 	if err := json.Unmarshal(raw, &arr); err == nil {
 		if len(arr) == 0 {
-			return nil, fmt.Errorf("dashboard data array is empty")
+			return nil, ErrDashboardNotFound
 		}
 		return &arr[len(arr)-1], nil
 	}
