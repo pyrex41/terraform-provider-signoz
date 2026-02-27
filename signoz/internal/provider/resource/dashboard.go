@@ -221,54 +221,43 @@ func (r *dashboardResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// createOrAdopt either creates a new dashboard or adopts an existing one,
-	// then reads back the full state from the API. Reading back all fields
-	// (not just computed ones) avoids "inconsistent result after apply" errors
-	// caused by JSON normalization differences (whitespace, HTML escaping).
+	// readBackState reads the dashboard from the API after create/adopt.
+	// It updates computed fields (ID, timestamps, source) from the server
+	// response, but PRESERVES the plan's widgets and variables values.
+	//
+	// Why: SigNoz's POST handler runs a v5 migration that mutates widget
+	// JSON in breaking ways (converts $var → {{.var}}, injects
+	// #SIGNOZ_VALUE orderBy, changes op:"in" → op:"="). If we store the
+	// mutated response, the Terraform state becomes the broken version,
+	// and Crossplane/upjet will adopt it as the desired state. By keeping
+	// the plan's values, the next reconciliation cycle detects a diff and
+	// PUTs the correct (unmutated) JSON back — SigNoz stores PUT payloads
+	// verbatim without migration.
 	readBackState := func(dashboardID string) bool {
 		dashboard, getErr := r.client.GetDashboard(ctx, dashboardID)
 		if getErr != nil {
 			addErr(&resp.Diagnostics, getErr, operationCreate, SigNozDashboard)
 			return false
 		}
-		plan.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
+		// Update computed-only fields from the server response.
 		plan.CreatedAt = types.StringValue(dashboard.CreatedAt)
 		plan.CreatedBy = types.StringValue(dashboard.CreatedBy)
-		plan.Description = types.StringValue(dashboard.Data.Description)
 		plan.ID = types.StringValue(dashboard.ID)
-		plan.Name = types.StringValue(dashboard.Data.Name)
 		plan.Source = types.StringValue(dashboard.Data.Source)
-		plan.Title = types.StringValue(dashboard.Data.Title)
 		plan.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
 		plan.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
-		plan.UploadedGrafana = types.BoolValue(dashboard.Data.UploadedGrafana)
-		plan.Version = types.StringValue(dashboard.Data.Version)
 
-		var fErr error
-		plan.Layout, fErr = dashboard.Data.LayoutToTerraform()
-		if fErr != nil {
-			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
-			return false
+		// For version: use plan value if set, otherwise use server value.
+		if plan.Version.IsNull() || plan.Version.IsUnknown() || plan.Version.ValueString() == "" {
+			plan.Version = types.StringValue(dashboard.Data.Version)
 		}
-		plan.PanelMap, fErr = dashboard.Data.PanelMapToTerraform()
-		if fErr != nil {
-			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
-			return false
-		}
-		plan.Variables, fErr = dashboard.Data.VariablesToTerraform()
-		if fErr != nil {
-			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
-			return false
-		}
-		plan.Widgets, fErr = dashboard.Data.WidgetsToTerraform()
-		if fErr != nil {
-			addErr(&resp.Diagnostics, fErr, operationCreate, SigNozDashboard)
-			return false
-		}
-		var d diag.Diagnostics
-		plan.Tags, d = dashboard.Data.TagsToTerraform()
-		resp.Diagnostics.Append(d...)
-		return !resp.Diagnostics.HasError()
+
+		// Preserve plan values for widgets, variables, layout, and other
+		// user-provided fields. The server may have mutated these during
+		// POST (v5 migration), but the plan values are what the user intended.
+		// Do NOT overwrite them with the server's mutated response.
+
+		return true
 	}
 
 	// If an ID is provided (e.g., from Crossplane external-name), adopt the
@@ -333,43 +322,75 @@ func (r *dashboardResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	// Overwrite items with refreshed state.
-	state.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
+	// Update computed-only fields from the server response.
 	state.CreatedAt = types.StringValue(dashboard.CreatedAt)
 	state.CreatedBy = types.StringValue(dashboard.CreatedBy)
-	state.Description = types.StringValue(dashboard.Data.Description)
 	state.ID = types.StringValue(dashboard.ID)
-	state.Name = types.StringValue(dashboard.Data.Name)
 	state.Source = types.StringValue(dashboard.Data.Source)
-	state.Title = types.StringValue(dashboard.Data.Title)
 	state.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
 	state.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
+
+	// For user-provided fields, we read the server values but use semantic
+	// JSON comparison to decide whether to update state. If the server's
+	// JSON is semantically identical to our state, keep our state value
+	// (preserving formatting). If it genuinely differs (e.g., someone
+	// edited the dashboard in the UI), adopt the server's value.
+	serverWidgets, err := dashboard.Data.WidgetsToTerraform()
+	if err != nil {
+		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
+		return
+	}
+	if !state.Widgets.IsNull() && !state.Widgets.IsUnknown() &&
+		semanticallyEqualJSON(state.Widgets.ValueString(), serverWidgets.ValueString()) {
+		// Server returned equivalent JSON — keep our state value to prevent
+		// drift from server-side normalization (v5 migration, key reordering).
+	} else {
+		state.Widgets = serverWidgets
+	}
+
+	serverVars, err := dashboard.Data.VariablesToTerraform()
+	if err != nil {
+		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
+		return
+	}
+	if !state.Variables.IsNull() && !state.Variables.IsUnknown() &&
+		semanticallyEqualJSON(state.Variables.ValueString(), serverVars.ValueString()) {
+		// Keep state value.
+	} else {
+		state.Variables = serverVars
+	}
+
+	serverLayout, err := dashboard.Data.LayoutToTerraform()
+	if err != nil {
+		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
+		return
+	}
+	if !state.Layout.IsNull() && !state.Layout.IsUnknown() &&
+		semanticallyEqualJSON(state.Layout.ValueString(), serverLayout.ValueString()) {
+		// Keep state value.
+	} else {
+		state.Layout = serverLayout
+	}
+
+	serverPanelMap, err := dashboard.Data.PanelMapToTerraform()
+	if err != nil {
+		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
+		return
+	}
+	if !state.PanelMap.IsNull() && !state.PanelMap.IsUnknown() &&
+		semanticallyEqualJSON(state.PanelMap.ValueString(), serverPanelMap.ValueString()) {
+		// Keep state value.
+	} else {
+		state.PanelMap = serverPanelMap
+	}
+
+	// Always refresh simple scalar fields from the server.
+	state.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
+	state.Description = types.StringValue(dashboard.Data.Description)
+	state.Name = types.StringValue(dashboard.Data.Name)
+	state.Title = types.StringValue(dashboard.Data.Title)
 	state.UploadedGrafana = types.BoolValue(dashboard.Data.UploadedGrafana)
 	state.Version = types.StringValue(dashboard.Data.Version)
-
-	state.PanelMap, err = dashboard.Data.PanelMapToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
-		return
-	}
-
-	state.Variables, err = dashboard.Data.VariablesToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
-		return
-	}
-
-	state.Layout, err = dashboard.Data.LayoutToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
-		return
-	}
-
-	state.Widgets, err = dashboard.Data.WidgetsToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationRead, SigNozDashboard)
-		return
-	}
 
 	state.Tags, diag = dashboard.Data.TagsToTerraform()
 	resp.Diagnostics.Append(diag...)
@@ -385,7 +406,6 @@ func (r *dashboardResource) Read(ctx context.Context, req resource.ReadRequest, 
 func (r *dashboardResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// Retrieve values from plan.
 	var plan, state dashboardResourceModel
-	var diag diag.Diagnostics
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -435,53 +455,27 @@ func (r *dashboardResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// Fetch updated dashboard.
+	// Fetch updated dashboard to refresh computed fields only.
+	// We preserve the plan's widgets, variables, layout, and other
+	// user-provided fields — SigNoz stores PUT payloads verbatim so the
+	// response should match, but we keep plan values as the source of truth
+	// to prevent any server-side normalization from corrupting state.
 	dashboard, err := r.client.GetDashboard(ctx, state.ID.ValueString())
 	if err != nil {
 		addErr(&resp.Diagnostics, err, operationUpdate, SigNozDashboard)
 		return
 	}
 
-	// Overwrite items with refreshed state.
-	plan.CollapsableRowsMigrated = types.BoolValue(dashboard.Data.CollapsableRowsMigrated)
+	// Update computed-only fields from the server response.
 	plan.CreatedAt = types.StringValue(dashboard.CreatedAt)
 	plan.CreatedBy = types.StringValue(dashboard.CreatedBy)
-	plan.Description = types.StringValue(dashboard.Data.Description)
 	plan.ID = types.StringValue(dashboard.ID)
-	plan.Name = types.StringValue(dashboard.Data.Name)
 	plan.Source = types.StringValue(dashboard.Data.Source)
-	plan.Title = types.StringValue(dashboard.Data.Title)
 	plan.UpdatedAt = types.StringValue(dashboard.UpdatedAt)
 	plan.UpdatedBy = types.StringValue(dashboard.UpdatedBy)
-	plan.UploadedGrafana = types.BoolValue(dashboard.Data.UploadedGrafana)
-	plan.Version = types.StringValue(dashboard.Data.Version)
 
-	plan.Layout, err = dashboard.Data.LayoutToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationUpdate, SigNozDashboard)
-		return
-	}
-
-	plan.PanelMap, err = dashboard.Data.PanelMapToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationUpdate, SigNozDashboard)
-		return
-	}
-
-	plan.Variables, err = dashboard.Data.VariablesToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationUpdate, SigNozDashboard)
-		return
-	}
-
-	plan.Widgets, err = dashboard.Data.WidgetsToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationUpdate, SigNozDashboard)
-		return
-	}
-
-	plan.Tags, diag = dashboard.Data.TagsToTerraform()
-	resp.Diagnostics.Append(diag...)
+	// Preserve plan values for user-provided fields (widgets, variables,
+	// layout, title, description, etc.) — they are the source of truth.
 
 	// Set refreshed state.
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
