@@ -33,11 +33,8 @@ func (m *jsonNormalizeModifier) PlanModifyString(ctx context.Context, req planmo
 		return
 	}
 
-	planNorm := normalizeJSON(req.PlanValue.ValueString())
-	stateNorm := normalizeJSON(req.StateValue.ValueString())
-
 	// If they're semantically the same JSON, use the state value to suppress the diff.
-	if planNorm == stateNorm {
+	if semanticallyEqualJSON(req.PlanValue.ValueString(), req.StateValue.ValueString()) {
 		resp.PlanValue = req.StateValue
 	}
 }
@@ -45,14 +42,32 @@ func (m *jsonNormalizeModifier) PlanModifyString(ctx context.Context, req planmo
 // normalizeJSON compacts JSON and un-escapes HTML entities so that
 // `>=` and `\u003e=` are treated as identical.
 func normalizeJSON(s string) string {
-	if s == "" {
+	n, ok := normalizeJSONValue(s)
+	if !ok {
 		return s
+	}
+	return n
+}
+
+func semanticallyEqualJSON(a, b string) bool {
+	// Keep non-JSON behavior strict to avoid suppressing real diffs.
+	an, aok := normalizeJSONValue(a)
+	bn, bok := normalizeJSONValue(b)
+	if !aok || !bok {
+		return a == b
+	}
+	return an == bn
+}
+
+func normalizeJSONValue(s string) (string, bool) {
+	if s == "" {
+		return s, true
 	}
 
 	// First, unmarshal to normalize structure
 	var v interface{}
 	if err := json.Unmarshal([]byte(s), &v); err != nil {
-		return s // not valid JSON, return as-is
+		return "", false
 	}
 
 	// Re-marshal with no HTML escaping, compact form
@@ -60,12 +75,12 @@ func normalizeJSON(s string) string {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
-		return s
+		return "", false
 	}
 
 	b := buf.Bytes()
 	if len(b) > 0 && b[len(b)-1] == '\n' {
 		b = b[:len(b)-1]
 	}
-	return string(b)
+	return string(b), true
 }
