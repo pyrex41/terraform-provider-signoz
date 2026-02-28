@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"errors"
 
@@ -293,6 +294,53 @@ func (r *dashboardResource) Create(ctx context.Context, req resource.CreateReque
 		}
 
 		tflog.Debug(ctx, "Created dashboard", map[string]any{"dashboard": dashboard})
+
+		// Verify the returned UUID actually belongs to this dashboard.
+		// SigNoz uses UUIDv7 (timestamp-based) and can return identical UUIDs
+		// for dashboards created in the same millisecond, causing one to
+		// silently overwrite the other. Detect this by checking that the
+		// dashboard at the returned UUID has the expected title.
+		verifyDashboard, verifyErr := r.client.GetDashboard(ctx, dashboard.ID)
+		if verifyErr != nil {
+			resp.Diagnostics.AddError(
+				"Error verifying dashboard",
+				fmt.Sprintf("Could not verify dashboard %q after creation: %s", dashboard.ID, verifyErr.Error()),
+			)
+			return
+		}
+		if verifyDashboard.Data.Title != dashboardPayload.Title {
+			// UUID collision detected — another dashboard was created with the
+			// same UUID. Delete the collided dashboard and retry once.
+			tflog.Warn(ctx, "UUID collision detected: dashboard at returned UUID has different title, retrying create",
+				map[string]any{
+					"collidedID":    dashboard.ID,
+					"expectedTitle": dashboardPayload.Title,
+					"actualTitle":   verifyDashboard.Data.Title,
+				})
+
+			// Sleep to ensure the next UUIDv7 gets a different timestamp.
+			time.Sleep(10 * time.Millisecond)
+
+			retryDashboard, retryErr := r.client.CreateDashboard(ctx, dashboardPayload)
+			if retryErr != nil {
+				resp.Diagnostics.AddError(
+					"Error creating dashboard (retry after UUID collision)",
+					"Could not create dashboard on retry: "+retryErr.Error(),
+				)
+				return
+			}
+
+			if retryDashboard.ID == dashboard.ID {
+				resp.Diagnostics.AddError(
+					"UUID collision persists",
+					fmt.Sprintf("SigNoz returned the same UUID %q on retry. This is a SigNoz server bug — dashboard creates within the same timestamp get identical UUIDs.", dashboard.ID),
+				)
+				return
+			}
+
+			dashboard = retryDashboard
+			tflog.Info(ctx, "Retry succeeded with new UUID", map[string]any{"newID": dashboard.ID})
+		}
 
 		if !readBackState(dashboard.ID) {
 			return
