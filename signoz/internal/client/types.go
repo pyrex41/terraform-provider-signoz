@@ -91,8 +91,8 @@ func parseDashboardData(raw json.RawMessage) (*dashboardData, error) {
 	return nil, fmt.Errorf("failed to parse dashboard data: unexpected format: %s", truncateStr(string(raw), 200))
 }
 
-// parseDashboardDataByName parses the dashboard data from an array response,
-// matching by name. Falls back to parseDashboardData if no name match found.
+// parseDashboardDataByName parses the dashboard data from the response,
+// matching by name. Works for both single-object and array responses.
 func parseDashboardDataByName(raw json.RawMessage, name string) (*dashboardData, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, fmt.Errorf("dashboard data is empty or null")
@@ -101,7 +101,14 @@ func parseDashboardDataByName(raw json.RawMessage, name string) (*dashboardData,
 	// Try single object first.
 	var single dashboardData
 	if err := json.Unmarshal(raw, &single); err == nil && single.ID != "" {
-		return &single, nil
+		// Validate the name matches — SigNoz may return a different
+		// dashboard than the one just created (observed in practice).
+		if single.Data.Name == name || name == "" {
+			return &single, nil
+		}
+		// Name mismatch on single-object response. The newly created
+		// dashboard exists but SigNoz returned the wrong one. Fall
+		// through to GET the full list and match by name.
 	}
 
 	// Try array — match by name.

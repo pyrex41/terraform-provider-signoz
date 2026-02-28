@@ -115,12 +115,63 @@ func (c *Client) CreateDashboard(ctx context.Context, dashboardPayload *model.Da
 
 	dashboard, err := parseDashboardDataByName(bodyObj.Data, dashboardPayload.Name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse created dashboard data: %w", err)
+		// The POST response may return a different dashboard (e.g., SigNoz
+		// returns the most recently cached dashboard as a single object).
+		// Fall back to GET /api/v1/dashboards and search the full list.
+		tflog.Warn(ctx, "CreateDashboard: POST response did not contain expected dashboard, fetching full list",
+			map[string]any{"expectedName": dashboardPayload.Name, "parseError": err.Error()})
+
+		dashboard, err = c.findDashboardByName(ctx, dashboardPayload.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find created dashboard by name %q: %w", dashboardPayload.Name, err)
+		}
 	}
 
 	tflog.Debug(ctx, "CreateDashboard: dashboard created", map[string]any{"dashboardID": dashboard.ID, "dashboardName": dashboard.Data.Name})
 
 	return dashboard, nil
+}
+
+// findDashboardByName fetches all dashboards and returns the one matching name.
+func (c *Client) findDashboardByName(ctx context.Context, name string) (*dashboardData, error) {
+	listURL, err := url.JoinPath(c.hostURL.String(), dashboardPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodGet, listURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.doRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var bodyObj dashboardResponse
+	if err := json.Unmarshal(body, &bodyObj); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal dashboard list: %w", err)
+	}
+
+	if bodyObj.Status != "success" {
+		return nil, fmt.Errorf("dashboard list returned error: %s", bodyObj.Error)
+	}
+
+	var arr []dashboardData
+	if err := json.Unmarshal(bodyObj.Data, &arr); err != nil {
+		return nil, fmt.Errorf("failed to parse dashboard list as array: %w", err)
+	}
+
+	for i := range arr {
+		if arr[i].Data.Name == name {
+			tflog.Info(ctx, "findDashboardByName: found dashboard", map[string]any{
+				"name": name, "id": arr[i].ID,
+			})
+			return &arr[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("dashboard with name %q not found in list of %d dashboards", name, len(arr))
 }
 
 // UpdateDashboard - Updates an existing dashboard.
