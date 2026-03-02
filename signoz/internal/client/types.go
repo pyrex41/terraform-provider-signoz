@@ -123,8 +123,9 @@ func parseDashboardDataByName(raw json.RawMessage, name string) (*dashboardData,
 				return &arr[i], nil
 			}
 		}
-		// Fallback: return the last element (most recently created).
-		return &arr[len(arr)-1], nil
+		// No name match found in array — return error so caller can
+		// fall back to findDashboardByName which does a fresh GET.
+		return nil, fmt.Errorf("dashboard with name %q not found in POST response array of %d dashboards", name, len(arr))
 	}
 
 	return nil, fmt.Errorf("failed to parse dashboard data: unexpected format: %s", truncateStr(string(raw), 200))
