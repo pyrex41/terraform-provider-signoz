@@ -18,7 +18,12 @@ const (
 )
 
 // GetChannel - Returns a specific notification channel.
+// Returns nil, nil when the channel is not found (empty ID or API returns empty data).
 func (c *Client) GetChannel(ctx context.Context, channelID string) (*model.NotificationChannel, error) {
+	if channelID == "" {
+		return nil, nil
+	}
+
 	url, err := url.JoinPath(c.hostURL.String(), channelPath, channelID)
 	if err != nil {
 		return nil, err
@@ -49,7 +54,9 @@ func (c *Client) GetChannel(ctx context.Context, channelID string) (*model.Notif
 
 	channel, err := parseChannelData(bodyObj.Data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse channel data: %w", err)
+		// Treat parse errors from empty data as not-found
+		tflog.Debug(ctx, "GetChannel: channel not found or empty data", map[string]any{"channelID": channelID, "error": err.Error()})
+		return nil, nil
 	}
 
 	tflog.Debug(ctx, "GetChannel: channel fetched", map[string]any{"channelID": channel.ID})

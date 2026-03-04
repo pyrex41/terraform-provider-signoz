@@ -280,6 +280,11 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 		addErr(&resp.Diagnostics, err, operationRead, SigNozNotificationChannel)
 		return
 	}
+	if channel == nil {
+		// Channel not found — remove from state so Terraform knows to recreate.
+		resp.State.RemoveResource(ctx)
+		return
+	}
 
 	mapChannelToState(ctx, channel, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
