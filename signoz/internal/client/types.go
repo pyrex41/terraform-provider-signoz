@@ -141,6 +141,39 @@ type dashboardData struct {
 	Data      model.Dashboard `json:"data"`
 }
 
+// channelResponse - Maps the response data of GetChannel and CreateChannel.
+type channelResponse struct {
+	Status    string          `json:"status"`
+	Error     string          `json:"error"`
+	ErrorType string          `json:"errorType"`
+	Data      json.RawMessage `json:"data"`
+}
+
+// parseChannelData parses the notification channel data from the response,
+// handling both a single object and an array (taking the first element).
+func parseChannelData(raw json.RawMessage) (*model.NotificationChannel, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, fmt.Errorf("channel data is empty or null")
+	}
+
+	// Try single object first.
+	var channel model.NotificationChannel
+	if err := json.Unmarshal(raw, &channel); err == nil && channel.ID != "" {
+		return &channel, nil
+	}
+
+	// Try array of channels (take the first element).
+	var channels []model.NotificationChannel
+	if err := json.Unmarshal(raw, &channels); err == nil {
+		if len(channels) == 0 {
+			return nil, fmt.Errorf("channel data array is empty")
+		}
+		return &channels[0], nil
+	}
+
+	return nil, fmt.Errorf("failed to parse channel data: unexpected format: %s", truncateStr(string(raw), 200))
+}
+
 // truncateStr truncates a string to maxLen characters for safe logging.
 func truncateStr(s string, maxLen int) string {
 	if len(s) <= maxLen {
