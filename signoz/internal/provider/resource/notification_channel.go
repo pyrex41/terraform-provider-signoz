@@ -272,6 +272,10 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
+	// Save existing config blocks before the API read overwrites them.
+	prevSlackConfigs := state.SlackConfigs
+	prevWebhookConfigs := state.WebhookConfigs
+
 	channel, err := r.client.GetChannel(ctx, state.ID.ValueString())
 	if err != nil {
 		addErr(&resp.Diagnostics, err, operationRead, SigNozNotificationChannel)
@@ -286,6 +290,14 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 	mapChannelToState(ctx, channel, &state, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Preserve config blocks when the API doesn't return them.
+	if state.SlackConfigs.IsNull() && !prevSlackConfigs.IsNull() {
+		state.SlackConfigs = prevSlackConfigs
+	}
+	if state.WebhookConfigs.IsNull() && !prevWebhookConfigs.IsNull() {
+		state.WebhookConfigs = prevWebhookConfigs
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -315,6 +327,9 @@ func (r *notificationChannelResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
+	// Read back the channel to capture server-computed fields (updated_at, etc.).
+	// If the read succeeds and includes config blocks, use them; otherwise
+	// preserve the plan values (the API may not return nested configs on GET).
 	channel, err := r.client.GetChannel(ctx, state.ID.ValueString())
 	if err != nil {
 		addErr(&resp.Diagnostics, err, operationUpdate, SigNozNotificationChannel)
@@ -324,6 +339,20 @@ func (r *notificationChannelResource) Update(ctx context.Context, req resource.U
 	mapChannelToState(ctx, channel, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Preserve plan config blocks when the API response doesn't include them.
+	// The SigNoz GET endpoint may omit nested config objects.
+	var originalPlan notificationChannelResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &originalPlan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.SlackConfigs.IsNull() && !originalPlan.SlackConfigs.IsNull() {
+		plan.SlackConfigs = originalPlan.SlackConfigs
+	}
+	if plan.WebhookConfigs.IsNull() && !originalPlan.WebhookConfigs.IsNull() {
+		plan.WebhookConfigs = originalPlan.WebhookConfigs
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
