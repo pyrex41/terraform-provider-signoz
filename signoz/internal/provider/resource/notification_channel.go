@@ -119,10 +119,7 @@ func (r *notificationChannelResource) Schema(_ context.Context, _ resource.Schem
 		Attributes: map[string]schema.Attribute{
 			attr.Name: schema.StringAttribute{
 				Required:    true,
-				Description: "Name of the notification channel. Changing this forces recreation.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Description: "Name of the notification channel.",
 			},
 			attr.ChannelType: schema.StringAttribute{
 				Computed:    true,
