@@ -134,6 +134,12 @@ func (c *Client) UpdateChannel(ctx context.Context, channelID string, payload *m
 		return err
 	}
 
+	// SigNoz API may return an empty body on successful update (e.g. 204 No Content).
+	if len(body) == 0 {
+		tflog.Debug(ctx, "UpdateChannel: channel updated (empty response body)", map[string]any{"channelID": channelID})
+		return nil
+	}
+
 	var bodyObj signozResponse
 	err = json.Unmarshal(body, &bodyObj)
 	if err != nil {
