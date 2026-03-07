@@ -401,12 +401,10 @@ func (r *alertResource) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.UpdateAt = types.StringValue(alert.UpdateAt)
 	plan.UpdateBy = types.StringValue(alert.UpdateBy)
 
-	//As condition is JSON string, updated response contains extra keys
-	plan.Condition, err = alertPayload.ConditionToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationCreate, SigNozAlert)
-		return
-	}
+	// Keep plan.Condition as-is — the plan value is authoritative.
+	// alertPayload.ConditionToTerraform() would re-marshal with sorted keys,
+	// causing Terraform's post-apply consistency check to fail because the
+	// planned string (user's key order) ≠ the re-marshaled string (sorted).
 
 	var diagLabels diag.Diagnostics
 	plan.Labels, diagLabels = alert.LabelsToTerraform()
@@ -611,12 +609,10 @@ func (r *alertResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plan.UpdateAt = types.StringValue(alert.UpdateAt)
 	plan.UpdateBy = types.StringValue(alert.UpdateBy)
 
-	//As condition is JSON string, updated response contains extra keys
-	plan.Condition, err = alertUpdate.ConditionToTerraform()
-	if err != nil {
-		addErr(&resp.Diagnostics, err, operationUpdate, SigNozAlert)
-		return
-	}
+	// Keep plan.Condition as-is — the plan value is authoritative.
+	// alertUpdate.ConditionToTerraform() would re-marshal with sorted keys,
+	// causing Terraform's post-apply consistency check to fail because the
+	// planned string (user's key order) ≠ the re-marshaled string (sorted).
 
 	var diagLabelsUpdate diag.Diagnostics
 	plan.Labels, diagLabelsUpdate = alert.LabelsToTerraform()

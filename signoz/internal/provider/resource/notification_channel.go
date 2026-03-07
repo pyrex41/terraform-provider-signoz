@@ -256,9 +256,24 @@ func (r *notificationChannelResource) Create(ctx context.Context, req resource.C
 		}
 	}
 
+	// Save plan config blocks before the API read overwrites them.
+	planSlackConfigs := plan.SlackConfigs
+	planWebhookConfigs := plan.WebhookConfigs
+
 	mapChannelToState(ctx, channel, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Preserve plan config blocks when the API response doesn't include them.
+	// The SigNoz GET endpoint may omit nested config objects, which causes
+	// Terraform's post-apply consistency check to fail with
+	// "block count changed from 1 to 0".
+	if plan.SlackConfigs.IsNull() && !planSlackConfigs.IsNull() {
+		plan.SlackConfigs = planSlackConfigs
+	}
+	if plan.WebhookConfigs.IsNull() && !planWebhookConfigs.IsNull() {
+		plan.WebhookConfigs = planWebhookConfigs
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
