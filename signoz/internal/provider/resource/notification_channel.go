@@ -260,10 +260,22 @@ func (r *notificationChannelResource) Create(ctx context.Context, req resource.C
 	planSlackConfigs := plan.SlackConfigs
 	planWebhookConfigs := plan.WebhookConfigs
 
+	tflog.Debug(ctx, "notification_channel Create: plan config blocks before mapChannelToState",
+		map[string]any{
+			"slack_configs_null":   planSlackConfigs.IsNull(),
+			"webhook_configs_null": planWebhookConfigs.IsNull(),
+		})
+
 	mapChannelToState(ctx, channel, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	tflog.Debug(ctx, "notification_channel Create: after mapChannelToState",
+		map[string]any{
+			"slack_configs_null":   plan.SlackConfigs.IsNull(),
+			"webhook_configs_null": plan.WebhookConfigs.IsNull(),
+		})
 
 	// Preserve plan config blocks when the API response doesn't include them.
 	// The SigNoz GET endpoint may omit nested config objects, which causes
@@ -275,6 +287,12 @@ func (r *notificationChannelResource) Create(ctx context.Context, req resource.C
 	if plan.WebhookConfigs.IsNull() && !planWebhookConfigs.IsNull() {
 		plan.WebhookConfigs = planWebhookConfigs
 	}
+
+	tflog.Debug(ctx, "notification_channel Create: after preserve",
+		map[string]any{
+			"slack_configs_null":   plan.SlackConfigs.IsNull(),
+			"webhook_configs_null": plan.WebhookConfigs.IsNull(),
+		})
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -290,6 +308,12 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 	// Save existing config blocks before the API read overwrites them.
 	prevSlackConfigs := state.SlackConfigs
 	prevWebhookConfigs := state.WebhookConfigs
+
+	tflog.Debug(ctx, "notification_channel Read: state config blocks before API call",
+		map[string]any{
+			"slack_configs_null":   prevSlackConfigs.IsNull(),
+			"webhook_configs_null": prevWebhookConfigs.IsNull(),
+		})
 
 	channel, err := r.client.GetChannel(ctx, state.ID.ValueString())
 	if err != nil {
@@ -307,6 +331,12 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 		return
 	}
 
+	tflog.Debug(ctx, "notification_channel Read: after mapChannelToState",
+		map[string]any{
+			"slack_configs_null":   state.SlackConfigs.IsNull(),
+			"webhook_configs_null": state.WebhookConfigs.IsNull(),
+		})
+
 	// Preserve config blocks when the API doesn't return them.
 	if state.SlackConfigs.IsNull() && !prevSlackConfigs.IsNull() {
 		state.SlackConfigs = prevSlackConfigs
@@ -314,6 +344,12 @@ func (r *notificationChannelResource) Read(ctx context.Context, req resource.Rea
 	if state.WebhookConfigs.IsNull() && !prevWebhookConfigs.IsNull() {
 		state.WebhookConfigs = prevWebhookConfigs
 	}
+
+	tflog.Debug(ctx, "notification_channel Read: after preserve",
+		map[string]any{
+			"slack_configs_null":   state.SlackConfigs.IsNull(),
+			"webhook_configs_null": state.WebhookConfigs.IsNull(),
+		})
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -356,6 +392,12 @@ func (r *notificationChannelResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
+	tflog.Debug(ctx, "notification_channel Update: after mapChannelToState",
+		map[string]any{
+			"slack_configs_null":   plan.SlackConfigs.IsNull(),
+			"webhook_configs_null": plan.WebhookConfigs.IsNull(),
+		})
+
 	// Preserve plan config blocks when the API response doesn't include them.
 	// The SigNoz GET endpoint may omit nested config objects.
 	var originalPlan notificationChannelResourceModel
@@ -369,6 +411,12 @@ func (r *notificationChannelResource) Update(ctx context.Context, req resource.U
 	if plan.WebhookConfigs.IsNull() && !originalPlan.WebhookConfigs.IsNull() {
 		plan.WebhookConfigs = originalPlan.WebhookConfigs
 	}
+
+	tflog.Debug(ctx, "notification_channel Update: after preserve",
+		map[string]any{
+			"slack_configs_null":   plan.SlackConfigs.IsNull(),
+			"webhook_configs_null": plan.WebhookConfigs.IsNull(),
+		})
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -433,6 +481,13 @@ func buildChannelPayload(ctx context.Context, plan *notificationChannelResourceM
 
 // mapChannelToState maps the API response to the Terraform state model.
 func mapChannelToState(ctx context.Context, channel *model.NotificationChannel, state *notificationChannelResourceModel, diags *diag.Diagnostics) {
+	tflog.Debug(ctx, "mapChannelToState: API response config counts",
+		map[string]any{
+			"channel_id":           channel.ID,
+			"channel_name":        channel.Name,
+			"slack_config_count":   len(channel.SlackConfigs),
+			"webhook_config_count": len(channel.WebhookConfigs),
+		})
 	state.ID = types.StringValue(channel.ID)
 	state.Name = types.StringValue(channel.Name)
 	state.Type = types.StringValue(channel.Type)
