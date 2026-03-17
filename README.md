@@ -24,12 +24,18 @@ The **SigNoz Provider** enables [Terraform](https://terraform.io) to manage [Sig
 
 SigNoz >= 0.92 uses v5 query format internally. The provider preserves your Terraform plan values to prevent SigNoz's server-side v5 migration from mutating widget JSON (template variable rewriting, orderBy injection, operator changes). No special configuration is needed — this is handled automatically.
 
+### SigNoz v5 Alert Support
+
+Alerts support both v4 and v5 query formats via the `version` field (default `v4`). The v5 format uses a different condition structure (`compositeQuery.queries` array instead of `builderQueries`/`chQueries`/`promQueries` maps, and `thresholds` with per-threshold channels).
+
+Setting `schema_version = "v2alpha1"` enables additional fields: `evaluation` (rolling window configuration) and `notification_settings` (renotify, group_by, use_policy). Unlike dashboards, alerts do not require mutation shielding — the SigNoz API does not perform server-side migration on alert condition JSON.
+
 ## Resources
 
 | Resource | Description |
 |----------|-------------|
 | `signoz_dashboard` | Manage SigNoz dashboards (v4 and v5 query formats) |
-| `signoz_alert` | Manage SigNoz alert rules |
+| `signoz_alert` | Manage SigNoz alert rules (v4 and v5 query formats, v1 and v2alpha1 schema versions) |
 | `signoz_notification_channel` | Manage notification channels (Slack, webhook) |
 
 ## Data Sources
