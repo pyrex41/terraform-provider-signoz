@@ -15,11 +15,10 @@ The **SigNoz Provider** enables [Terraform](https://terraform.io) to manage [Sig
 
 | Provider Version | SigNoz Version | Notes |
 |-----------------|----------------|-------|
-| >= 0.0.12-rc12 | >= 0.104.0 | Handles array-wrapped API responses introduced in SigNoz 0.104.0 |
-| >= 0.0.12-rc26 | 0.104.0 – 0.115.x | Current release; includes v5 dashboard mutation shielding, notification channel support |
-| < 0.0.12-rc12 | < 0.104.0 | Legacy single-object API response format only |
+| >= 0.0.12 | >= 0.104.0 | Current release; handles array-wrapped API responses, v5 dashboard mutation shielding, notification channels |
+| < 0.0.12 | < 0.104.0 | Legacy single-object API response format only |
 
-**Tested against:** SigNoz v0.110.1 (production), v0.115.0 (development)
+**Tested against:** SigNoz v0.110.1
 
 ### SigNoz v5 Dashboard Migration
 
